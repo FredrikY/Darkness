@@ -6,6 +6,7 @@ public class InventoryGridUI : MonoBehaviour
     [SerializeField] private InventorySlotUI[] _slotUIs;
     [SerializeField] private Inventory _inventory;
     [SerializeField] private InventoryEvents _events;
+    [SerializeField] private InventoryDragController _dragController;
     [SerializeField] private GameObject _panel;
 
     private bool _isOpen;
@@ -23,6 +24,7 @@ public class InventoryGridUI : MonoBehaviour
         for (int i = 0; i < _slotUIs.Length; i++)
         {
             _slotUIs[i].Initialize(i, false, _inventory, _events);
+            _slotUIs[i].SetDragController(_dragController);
         }
     }
 

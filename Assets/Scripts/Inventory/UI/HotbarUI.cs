@@ -6,6 +6,7 @@ public class HotbarUI : MonoBehaviour
     [SerializeField] private InventorySlotUI[] _slotUIs;
     [SerializeField] private Inventory _inventory;
     [SerializeField] private InventoryEvents _events;
+    [SerializeField] private InventoryDragController _dragController;
 
     private void Start()
     {
@@ -17,6 +18,7 @@ public class HotbarUI : MonoBehaviour
         for (int i = 0; i < _slotUIs.Length; i++)
         {
             _slotUIs[i].Initialize(i, true, _inventory, _events);
+            _slotUIs[i].SetDragController(_dragController);
         }
     }
 
