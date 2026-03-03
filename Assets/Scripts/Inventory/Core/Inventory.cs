@@ -214,6 +214,116 @@ public class Inventory : MonoBehaviour
         OnInventoryChanged?.Invoke();
     }
 
+    public void MoveBetweenAreas(int fromIndex, bool fromIsHotbar, int toIndex, bool toIsHotbar)
+    {
+        if (fromIsHotbar == toIsHotbar)
+        {
+            if (fromIsHotbar)
+                MoveHotbarSlot(fromIndex, toIndex);
+            else
+                MoveGridSlot(fromIndex, toIndex);
+            return;
+        }
+
+        ref InventorySlot fromSlot = ref fromIsHotbar ? ref _hotbarSlots[fromIndex] : ref _gridSlots[fromIndex];
+        ref InventorySlot toSlot = ref toIsHotbar ? ref _hotbarSlots[toIndex] : ref _gridSlots[toIndex];
+
+        (toSlot, fromSlot) = (fromSlot, toSlot);
+        
+        _events?.RaiseSlotChanged(fromIndex, fromIsHotbar);
+        _events?.RaiseSlotChanged(toIndex, toIsHotbar);
+        OnInventoryChanged?.Invoke();
+    }
+
+    public int StackItems(int fromIndex, bool fromIsHotbar, int toIndex, bool toIsHotbar)
+    {
+        ref InventorySlot fromSlot = ref fromIsHotbar ? ref _hotbarSlots[fromIndex] : ref _gridSlots[fromIndex];
+        ref InventorySlot toSlot = ref toIsHotbar ? ref _hotbarSlots[toIndex] : ref _gridSlots[toIndex];
+
+        if (fromSlot.IsEmpty || toSlot.IsEmpty || fromSlot.Item != toSlot.Item)
+            return 0;
+
+        int maxStack = toSlot.Item.MaxStack;
+        int spaceAvailable = maxStack - toSlot.Quantity;
+        int amountToTransfer = Mathf.Min(spaceAvailable, fromSlot.Quantity);
+
+        if (amountToTransfer <= 0)
+            return 0;
+
+        toSlot = new InventorySlot(toSlot.Item, toSlot.Quantity + amountToTransfer);
+        fromSlot = fromSlot.Quantity - amountToTransfer == 0 
+            ? InventorySlot.Empty 
+            : new InventorySlot(fromSlot.Item, fromSlot.Quantity - amountToTransfer);
+
+        _events?.RaiseSlotChanged(fromIndex, fromIsHotbar);
+        _events?.RaiseSlotChanged(toIndex, toIsHotbar);
+        OnInventoryChanged?.Invoke();
+
+        return amountToTransfer;
+    }
+
+    public (ItemData item, int splitCount) SplitStack(int index, bool isHotbar)
+    {
+        ref InventorySlot slot = ref isHotbar ? ref _hotbarSlots[index] : ref _gridSlots[index];
+
+        if (slot.IsEmpty)
+            return (null, 0);
+
+        int splitCount = Mathf.CeilToInt(slot.Quantity / 2f);
+        int remaining = slot.Quantity - splitCount;
+
+        ItemData item = slot.Item;
+        slot = remaining == 0 ? InventorySlot.Empty : new InventorySlot(slot.Item, remaining);
+
+        _events?.RaiseSlotChanged(index, isHotbar);
+        OnInventoryChanged?.Invoke();
+
+        return (item, splitCount);
+    }
+
+    public bool PlaceOneItem(int toIndex, bool toIsHotbar, ItemData item, ref int heldQuantity)
+    {
+        if (item == null || heldQuantity <= 0)
+            return false;
+
+        ref InventorySlot toSlot = ref toIsHotbar ? ref _hotbarSlots[toIndex] : ref _gridSlots[toIndex];
+
+        if (toSlot.IsEmpty)
+        {
+            toSlot = new InventorySlot(item, 1);
+            heldQuantity--;
+        }
+        else if (toSlot.Item == item && toSlot.Quantity < item.MaxStack)
+        {
+            toSlot = new InventorySlot(item, toSlot.Quantity + 1);
+            heldQuantity--;
+        }
+        else
+        {
+            return false;
+        }
+
+        _events?.RaiseSlotChanged(toIndex, toIsHotbar);
+        OnInventoryChanged?.Invoke();
+        return true;
+    }
+
+    public void SetSlot(int index, bool isHotbar, InventorySlot slot)
+    {
+        if (isHotbar)
+            _hotbarSlots[index] = slot;
+        else
+            _gridSlots[index] = slot;
+
+        _events?.RaiseSlotChanged(index, isHotbar);
+        OnInventoryChanged?.Invoke();
+    }
+
+    public InventorySlot GetSlot(int index, bool isHotbar)
+    {
+        return isHotbar ? _hotbarSlots[index] : _gridSlots[index];
+    }
+
     public void SplitGridStack(int index)
     {
         if (index < 0 || index >= _gridSlotCount) return;
