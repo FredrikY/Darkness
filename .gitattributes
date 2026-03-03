@@ -15,4 +15,14 @@
 *.controller merge=unityyamlmerge eol=lf
 
 
-## git-lfs ##
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.gif binary
+*.psd binary
+*.fbx binary
+*.FBX binary
+*.obj binary
+*.mp3 binary
+*.wav binary
+*.dll binary
