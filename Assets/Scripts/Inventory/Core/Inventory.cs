@@ -216,6 +216,24 @@ public class Inventory : MonoBehaviour
 
     public void MoveBetweenAreas(int fromIndex, bool fromIsHotbar, int toIndex, bool toIsHotbar)
     {
+        if (fromIsHotbar)
+        {
+            if (fromIndex < 0 || fromIndex >= _hotbarSlotCount) return;
+        }
+        else
+        {
+            if (fromIndex < 0 || fromIndex >= _gridSlotCount) return;
+        }
+
+        if (toIsHotbar)
+        {
+            if (toIndex < 0 || toIndex >= _hotbarSlotCount) return;
+        }
+        else
+        {
+            if (toIndex < 0 || toIndex >= _gridSlotCount) return;
+        }
+
         if (fromIsHotbar == toIsHotbar)
         {
             if (fromIsHotbar)
@@ -237,6 +255,24 @@ public class Inventory : MonoBehaviour
 
     public int StackItems(int fromIndex, bool fromIsHotbar, int toIndex, bool toIsHotbar)
     {
+        if (fromIsHotbar)
+        {
+            if (fromIndex < 0 || fromIndex >= _hotbarSlotCount) return 0;
+        }
+        else
+        {
+            if (fromIndex < 0 || fromIndex >= _gridSlotCount) return 0;
+        }
+
+        if (toIsHotbar)
+        {
+            if (toIndex < 0 || toIndex >= _hotbarSlotCount) return 0;
+        }
+        else
+        {
+            if (toIndex < 0 || toIndex >= _gridSlotCount) return 0;
+        }
+
         ref InventorySlot fromSlot = ref fromIsHotbar ? ref _hotbarSlots[fromIndex] : ref _gridSlots[fromIndex];
         ref InventorySlot toSlot = ref toIsHotbar ? ref _hotbarSlots[toIndex] : ref _gridSlots[toIndex];
 
@@ -264,6 +300,15 @@ public class Inventory : MonoBehaviour
 
     public (ItemData item, int splitCount) SplitStack(int index, bool isHotbar)
     {
+        if (isHotbar)
+        {
+            if (index < 0 || index >= _hotbarSlotCount) return (null, 0);
+        }
+        else
+        {
+            if (index < 0 || index >= _gridSlotCount) return (null, 0);
+        }
+
         ref InventorySlot slot = ref isHotbar ? ref _hotbarSlots[index] : ref _gridSlots[index];
 
         if (slot.IsEmpty)
@@ -285,6 +330,15 @@ public class Inventory : MonoBehaviour
     {
         if (item == null || heldQuantity <= 0)
             return false;
+
+        if (toIsHotbar)
+        {
+            if (toIndex < 0 || toIndex >= _hotbarSlotCount) return false;
+        }
+        else
+        {
+            if (toIndex < 0 || toIndex >= _gridSlotCount) return false;
+        }
 
         ref InventorySlot toSlot = ref toIsHotbar ? ref _hotbarSlots[toIndex] : ref _gridSlots[toIndex];
 
@@ -311,9 +365,15 @@ public class Inventory : MonoBehaviour
     public void SetSlot(int index, bool isHotbar, InventorySlot slot)
     {
         if (isHotbar)
+        {
+            if (index < 0 || index >= _hotbarSlotCount) return;
             _hotbarSlots[index] = slot;
+        }
         else
+        {
+            if (index < 0 || index >= _gridSlotCount) return;
             _gridSlots[index] = slot;
+        }
 
         _events?.RaiseSlotChanged(index, isHotbar);
         OnInventoryChanged?.Invoke();
@@ -321,7 +381,16 @@ public class Inventory : MonoBehaviour
 
     public InventorySlot GetSlot(int index, bool isHotbar)
     {
-        return isHotbar ? _hotbarSlots[index] : _gridSlots[index];
+        if (isHotbar)
+        {
+            if (index < 0 || index >= _hotbarSlotCount) return InventorySlot.Empty;
+            return _hotbarSlots[index];
+        }
+        else
+        {
+            if (index < 0 || index >= _gridSlotCount) return InventorySlot.Empty;
+            return _gridSlots[index];
+        }
     }
 
     public void SplitGridStack(int index)
