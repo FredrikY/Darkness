@@ -10,12 +10,15 @@ public class GridManager : MonoBehaviour
     [SerializeField] private BuildingEvents _events;
     [SerializeField] private GameObject _boardPrefab;
 
-    private readonly Dictionary<GridEdge, BoardData> _edges = new();
-    private readonly Dictionary<GridEdge, GameObject> _boardObjects = new();
+    private readonly Dictionary<GridFace, BoardData> _boards = new();
+    private readonly Dictionary<GridFace, GameObject> _boardObjects = new();
+
+    // Reusable buffer for adjacency queries (max 12 neighbors per face: 4 edges × 3 per edge)
+    private readonly GridFace[] _adjacencyBuffer = new GridFace[12];
 
     public float CellSize => _cellSize;
     public BuildingEvents Events => _events;
-    public int BoardCount => _edges.Count;
+    public int BoardCount => _boards.Count;
 
     private void Awake()
     {
@@ -26,6 +29,8 @@ public class GridManager : MonoBehaviour
         }
         Instance = this;
     }
+
+    // ─── Coordinate Conversion ───────────────────────────────────────
 
     public Vector3Int WorldToCell(Vector3 worldPosition)
     {
@@ -41,290 +46,198 @@ public class GridManager : MonoBehaviour
         return new Vector3(cell.x, cell.y, cell.z) * _cellSize;
     }
 
-    public bool HasEdge(GridEdge edge)
+    /// <summary>
+    /// Determines which face of the grid a world position is nearest to.
+    /// The position is snapped to the nearest cell, then the axis component
+    /// furthest from the cell center determines which face.
+    /// </summary>
+    public GridFace WorldToFace(Vector3 worldPosition)
     {
-        return _edges.ContainsKey(edge);
+        Vector3Int cell = WorldToCell(worldPosition);
+        Vector3 cellCenter = CellToWorld(cell);
+        Vector3 local = worldPosition - cellCenter;
+
+        float ax = Mathf.Abs(local.x);
+        float ay = Mathf.Abs(local.y);
+        float az = Mathf.Abs(local.z);
+
+        if (ay >= ax && ay >= az)
+        {
+            // Nearest to Y face
+            Vector3Int dir = local.y >= 0 ? Vector3Int.up : Vector3Int.down;
+            return GridFace.FromCellAndDirection(cell, dir);
+        }
+        if (ax >= az)
+        {
+            // Nearest to X face
+            Vector3Int dir = local.x >= 0 ? Vector3Int.right : Vector3Int.left;
+            return GridFace.FromCellAndDirection(cell, dir);
+        }
+        // Nearest to Z face
+        Vector3Int zDir = local.z >= 0 ? new Vector3Int(0, 0, 1) : new Vector3Int(0, 0, -1);
+        return GridFace.FromCellAndDirection(cell, zDir);
+    }
+
+    // ─── Queries ─────────────────────────────────────────────────────
+
+    public bool HasBoard(GridFace face)
+    {
+        return _boards.ContainsKey(face);
+    }
+
+    public BoardData? GetBoardData(GridFace face)
+    {
+        return _boards.TryGetValue(face, out BoardData data) ? data : null;
+    }
+
+    public IEnumerable<GridFace> GetAllFaces()
+    {
+        return _boards.Keys;
     }
 
     /// <summary>
-    /// Returns the equivalent GridEdge from the adjacent cell that shares the same
-    /// physical face. For example, cell (0,0,0) Up == cell (0,1,0) Down.
-    /// Only works for cardinal directions; returns null for diagonals.
+    /// Returns true if at least one adjacent face (sharing a physical edge)
+    /// already has a board placed. Returns true if the grid is empty
+    /// (first board can go anywhere).
     /// </summary>
-    public static GridEdge? GetOppositeFaceEdge(GridEdge edge)
+    public bool HasAdjacentBoard(GridFace face)
     {
-        EdgeDirection opposite = GridEdge.GetOpposite(edge.Direction);
-        if (opposite == EdgeDirection.None)
-            return null;
+        if (_boards.Count == 0)
+            return true;
 
-        Vector3Int neighborCell = edge.Cell + Vector3Int.RoundToInt(GridEdge.GetDirectionOffset(edge.Direction));
-        return new GridEdge(neighborCell, opposite);
+        face.GetAdjacentFaces(_adjacencyBuffer, out int count);
+        for (int i = 0; i < count; i++)
+        {
+            if (_boards.ContainsKey(_adjacencyBuffer[i]))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>
-    /// Checks whether a board already exists at the same physical location,
-    /// either as the exact same GridEdge or as the equivalent opposite face
-    /// on the neighboring cell.
+    /// Gets all faces adjacent to the given face that do NOT have a board.
+    /// Used for generating snap zones.
     /// </summary>
-    public bool HasBoardAtFace(GridEdge edge)
+    public void GetEmptyAdjacentFaces(GridFace face, List<GridFace> result)
     {
-        if (_edges.ContainsKey(edge))
-            return true;
+        result.Clear();
+        face.GetAdjacentFaces(_adjacencyBuffer, out int count);
+        for (int i = 0; i < count; i++)
+        {
+            if (!_boards.ContainsKey(_adjacencyBuffer[i]))
+                result.Add(_adjacencyBuffer[i]);
+        }
+    }
 
-        GridEdge? opposite = GetOppositeFaceEdge(edge);
-        if (opposite.HasValue && _edges.ContainsKey(opposite.Value))
-            return true;
+    public bool HasAnyBoardInCell(Vector3Int cell)
+    {
+        // Check all 6 faces of a cell
+        // +X face: GridFace(cell, X)
+        // -X face: GridFace(cell + left, X) = GridFace(cell - right, X)
+        // +Y face: GridFace(cell, Y)
+        // -Y face: GridFace(cell + down, Y) = GridFace(cell - up, Y)
+        // +Z face: GridFace(cell, Z)
+        // -Z face: GridFace(cell + back, Z) = GridFace(cell - forward, Z)
+
+        if (_boards.ContainsKey(new GridFace(cell, Axis.X))) return true;
+        if (_boards.ContainsKey(new GridFace(cell + Vector3Int.left, Axis.X))) return true;
+        if (_boards.ContainsKey(new GridFace(cell, Axis.Y))) return true;
+        if (_boards.ContainsKey(new GridFace(cell + Vector3Int.down, Axis.Y))) return true;
+        if (_boards.ContainsKey(new GridFace(cell, Axis.Z))) return true;
+        if (_boards.ContainsKey(new GridFace(cell + new Vector3Int(0, 0, -1), Axis.Z))) return true;
 
         return false;
     }
 
-    public BoardData? GetBoardData(GridEdge edge)
-    {
-        return _edges.TryGetValue(edge, out BoardData data) ? data : null;
-    }
+    // ─── Placement ───────────────────────────────────────────────────
 
-    public IEnumerable<GridEdge> GetAllEdges()
+    public bool TryPlaceBoard(GridFace face, BoardData data)
     {
-        return _edges.Keys;
-    }
-
-    public bool TryPlaceBoard(GridEdge edge, BoardData data)
-    {
-        if (HasBoardAtFace(edge))
+        if (_boards.ContainsKey(face))
             return false;
 
-        _edges[edge] = data;
-        SpawnBoardVisual(edge, data);
-        _events?.RaiseBoardPlaced(edge, data);
+        _boards[face] = data;
+        SpawnBoardVisual(face, data);
+        _events?.RaiseBoardPlaced(face, data);
         return true;
     }
 
-    public void RemoveBoard(GridEdge edge)
+    public void RemoveBoard(GridFace face)
     {
-        if (!HasEdge(edge))
+        if (!_boards.ContainsKey(face))
             return;
 
-        _edges.Remove(edge);
-        DestroyBoardVisual(edge);
-        _events?.RaiseBoardRemoved(edge);
+        _boards.Remove(face);
+        DestroyBoardVisual(face);
+        _events?.RaiseBoardRemoved(face);
     }
 
     /// <summary>
     /// Replaces a board's visual with a reinforced version while keeping its position.
-    /// Returns true if successful, false if no board exists at the edge.
     /// </summary>
-    public bool ReinforceBoard(GridEdge edge, GameObject reinforcedPrefab)
+    public bool ReinforceBoard(GridFace face, GameObject reinforcedPrefab)
     {
-        if (!_edges.TryGetValue(edge, out BoardData data))
+        if (!_boards.TryGetValue(face, out BoardData data))
             return false;
 
-        DestroyBoardVisual(edge);
+        DestroyBoardVisual(face);
 
         float placedTime = data.PlacedTime;
 
         if (reinforcedPrefab != null)
         {
-            Vector3 worldPos = edge.GetWorldPosition(_cellSize);
-            Quaternion rotation = GetBoardRotation(edge.Direction);
+            Vector3 worldPos = face.GetWorldPosition(_cellSize);
+            Quaternion rotation = face.GetRotation();
 
             GameObject board = Instantiate(reinforcedPrefab, worldPos, rotation, transform);
-            board.name = $"Board_{edge.Cell}_{edge.Direction}_Reinforced";
+            board.name = $"Board_{face}_Reinforced";
 
             BoardVisual visual = board.GetComponent<BoardVisual>();
             if (visual != null)
-                visual.Initialize(edge);
+                visual.Initialize(face);
 
-            _boardObjects[edge] = board;
+            _boardObjects[face] = board;
         }
 
-        _edges[edge] = new BoardData("reinforced", placedTime, data.CustomData);
-
+        _boards[face] = new BoardData("reinforced", placedTime, data.CustomData);
         return true;
     }
 
-    private void SpawnBoardVisual(GridEdge edge, BoardData data)
+    // ─── Visual Spawning ─────────────────────────────────────────────
+
+    private void SpawnBoardVisual(GridFace face, BoardData data)
     {
         if (_boardPrefab == null) return;
 
-        Vector3 worldPos = edge.GetWorldPosition(_cellSize);
-        Quaternion rotation = GetBoardRotation(edge.Direction);
+        Vector3 worldPos = face.GetWorldPosition(_cellSize);
+        Quaternion rotation = face.GetRotation();
 
         GameObject board = Instantiate(_boardPrefab, worldPos, rotation, transform);
-        board.name = $"Board_{edge.Cell}_{edge.Direction}";
+        board.name = $"Board_{face}";
 
         BoardVisual visual = board.GetComponent<BoardVisual>();
         if (visual != null)
-            visual.Initialize(edge);
+            visual.Initialize(face);
 
-        _boardObjects[edge] = board;
+        _boardObjects[face] = board;
     }
 
-    private void DestroyBoardVisual(GridEdge edge)
+    private void DestroyBoardVisual(GridFace face)
     {
-        if (_boardObjects.TryGetValue(edge, out GameObject board))
+        if (_boardObjects.TryGetValue(face, out GameObject board))
         {
             Destroy(board);
-            _boardObjects.Remove(edge);
+            _boardObjects.Remove(face);
         }
     }
 
-    public static Quaternion GetBoardRotation(EdgeDirection direction)
-    {
-        return direction switch
-        {
-            EdgeDirection.Up => Quaternion.Euler(0, 0, 0),
-            EdgeDirection.Down => Quaternion.Euler(180, 0, 0),
-            EdgeDirection.Left => Quaternion.Euler(0, 0, 90),
-            EdgeDirection.Right => Quaternion.Euler(0, 0, -90),
-            EdgeDirection.Forward => Quaternion.Euler(90, 0, 0),
-            EdgeDirection.Back => Quaternion.Euler(-90, 0, 0),
-            _ => Quaternion.LookRotation(GridEdge.GetDirectionOffset(direction))
-        };
-    }
-
-    public bool HasAdjacentBoard(GridEdge edge)
-    {
-        if (_edges.Count == 0)
-            return true;
-
-        if (edge.IsDiagonal())
-        {
-            return CheckDiagonalAdjacency(edge);
-        }
-
-        foreach (GridEdge neighbor in GetSideTouchingNeighbors(edge))
-        {
-            if (HasEdge(neighbor))
-                return true;
-        }
-
-        return false;
-    }
-
-    /// <summary>
-    /// Returns all board positions that share a physical side (edge of the rectangle)
-    /// with the given board. For a cardinal face, the board rectangle has 4 sides.
-    /// Each side is shared by two potential boards:
-    ///   1. A same-direction board in the neighboring cell along that tangent axis
-    ///   2. A perpendicular board on the same cell whose face is in that tangent direction
-    /// This yields 8 potential side-touching neighbors for cardinal faces.
-    /// </summary>
-    private static List<GridEdge> GetSideTouchingNeighbors(GridEdge edge)
-    {
-        var neighbors = new List<GridEdge>();
-        Vector3Int cell = edge.Cell;
-        EdgeDirection dir = edge.Direction;
-
-        // Get the two tangent axes of the face plane.
-        // For a face with normal along axis N, the tangent axes are the other two cardinal axes.
-        GetTangentAxes(dir, out Vector3Int tangent1Pos, out Vector3Int tangent1Neg,
-                                 out EdgeDirection tangent1DirPos, out EdgeDirection tangent1DirNeg,
-                                 out Vector3Int tangent2Pos, out Vector3Int tangent2Neg,
-                                 out EdgeDirection tangent2DirPos, out EdgeDirection tangent2DirNeg);
-
-        // For each tangent direction (4 total: +/- on each of 2 axes):
-        // - Same face on neighboring cell along that tangent
-        // - Perpendicular face on the same cell in that tangent direction
-        neighbors.Add(new GridEdge(cell + tangent1Pos, dir));
-        neighbors.Add(new GridEdge(cell, tangent1DirPos));
-
-        neighbors.Add(new GridEdge(cell + tangent1Neg, dir));
-        neighbors.Add(new GridEdge(cell, tangent1DirNeg));
-
-        neighbors.Add(new GridEdge(cell + tangent2Pos, dir));
-        neighbors.Add(new GridEdge(cell, tangent2DirPos));
-
-        neighbors.Add(new GridEdge(cell + tangent2Neg, dir));
-        neighbors.Add(new GridEdge(cell, tangent2DirNeg));
-
-        return neighbors;
-    }
-
-    /// <summary>
-    /// For a cardinal face direction, outputs the two tangent axes as cell offsets
-    /// and their corresponding EdgeDirection values.
-    /// </summary>
-    private static void GetTangentAxes(EdgeDirection faceDir,
-        out Vector3Int t1Pos, out Vector3Int t1Neg, out EdgeDirection t1DirPos, out EdgeDirection t1DirNeg,
-        out Vector3Int t2Pos, out Vector3Int t2Neg, out EdgeDirection t2DirPos, out EdgeDirection t2DirNeg)
-    {
-        switch (faceDir)
-        {
-            case EdgeDirection.Up:
-            case EdgeDirection.Down:
-                // Normal is Y-axis, tangents are X and Z
-                t1Pos = Vector3Int.right;   t1Neg = Vector3Int.left;
-                t1DirPos = EdgeDirection.Right; t1DirNeg = EdgeDirection.Left;
-                t2Pos = Vector3Int.forward; t2Neg = Vector3Int.back;
-                t2DirPos = EdgeDirection.Forward; t2DirNeg = EdgeDirection.Back;
-                break;
-            case EdgeDirection.Left:
-            case EdgeDirection.Right:
-                // Normal is X-axis, tangents are Y and Z
-                t1Pos = Vector3Int.up;      t1Neg = Vector3Int.down;
-                t1DirPos = EdgeDirection.Up; t1DirNeg = EdgeDirection.Down;
-                t2Pos = Vector3Int.forward; t2Neg = Vector3Int.back;
-                t2DirPos = EdgeDirection.Forward; t2DirNeg = EdgeDirection.Back;
-                break;
-            case EdgeDirection.Forward:
-            case EdgeDirection.Back:
-                // Normal is Z-axis, tangents are X and Y
-                t1Pos = Vector3Int.right;   t1Neg = Vector3Int.left;
-                t1DirPos = EdgeDirection.Right; t1DirNeg = EdgeDirection.Left;
-                t2Pos = Vector3Int.up;      t2Neg = Vector3Int.down;
-                t2DirPos = EdgeDirection.Up; t2DirNeg = EdgeDirection.Down;
-                break;
-            default:
-                t1Pos = t1Neg = t2Pos = t2Neg = Vector3Int.zero;
-                t1DirPos = t1DirNeg = t2DirPos = t2DirNeg = EdgeDirection.None;
-                break;
-        }
-    }
-
-    private bool CheckDiagonalAdjacency(GridEdge edge)
-    {
-        // For diagonal edges, decompose into component cardinal directions
-        // and check if any of those cardinal faces on the same cell exist.
-        // A diagonal board shares a side with each cardinal face whose axis
-        // is one of the diagonal's component axes.
-        foreach (EdgeDirection component in GetCardinalComponents(edge.Direction))
-        {
-            if (HasEdge(new GridEdge(edge.Cell, component)))
-                return true;
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// Decomposes a flags-based EdgeDirection into its individual cardinal components.
-    /// </summary>
-    private static List<EdgeDirection> GetCardinalComponents(EdgeDirection dir)
-    {
-        var components = new List<EdgeDirection>();
-        if ((dir & EdgeDirection.Up) != 0) components.Add(EdgeDirection.Up);
-        if ((dir & EdgeDirection.Down) != 0) components.Add(EdgeDirection.Down);
-        if ((dir & EdgeDirection.Left) != 0) components.Add(EdgeDirection.Left);
-        if ((dir & EdgeDirection.Right) != 0) components.Add(EdgeDirection.Right);
-        if ((dir & EdgeDirection.Forward) != 0) components.Add(EdgeDirection.Forward);
-        if ((dir & EdgeDirection.Back) != 0) components.Add(EdgeDirection.Back);
-        return components;
-    }
-
-    public bool HasAnyBoardInCell(Vector3Int cell)
-    {
-        foreach (var kvp in _edges)
-        {
-            if (kvp.Key.Cell == cell)
-                return true;
-        }
-        return false;
-    }
+    // ─── Utility ─────────────────────────────────────────────────────
 
     public void ClearAll()
     {
-        foreach (var edge in new List<GridEdge>(_edges.Keys))
+        foreach (var face in new List<GridFace>(_boards.Keys))
         {
-            RemoveBoard(edge);
+            RemoveBoard(face);
         }
     }
 }

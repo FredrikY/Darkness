@@ -60,33 +60,33 @@ public class ReinforcerUseHandler : MonoBehaviour
         if (!_attackPressed) return;
         _attackPressed = false;
 
-        if (Physics.Raycast(_cameraTransform.position, _cameraTransform.forward, 
+        if (Physics.Raycast(_cameraTransform.position, _cameraTransform.forward,
             out RaycastHit hit, _useDistance, _boardLayer))
         {
-            var edge = GetEdgeFromHit(hit);
-            if (edge.HasValue)
+            var face = GetFaceFromHit(hit);
+            if (face.HasValue)
             {
-                TryReinforceBoard(edge.Value);
+                TryReinforceBoard(face.Value);
             }
         }
     }
 
-    private GridEdge? GetEdgeFromHit(RaycastHit hit)
+    private GridFace? GetFaceFromHit(RaycastHit hit)
     {
         var boardVisual = hit.collider.GetComponentInParent<BoardVisual>();
         if (boardVisual != null)
         {
-            return boardVisual.Edge;
+            return boardVisual.Face;
         }
         return null;
     }
 
-    private void TryReinforceBoard(GridEdge edge)
+    private void TryReinforceBoard(GridFace face)
     {
         if (!_inventory.HasItem(_reinforcerItem, 1)) return;
         if (_reinforcedBoardPrefab == null) return;
 
-        if (_gridManager.ReinforceBoard(edge, _reinforcedBoardPrefab))
+        if (_gridManager.ReinforceBoard(face, _reinforcedBoardPrefab))
         {
             _inventory.TryRemoveItem(_reinforcerItem, 1);
         }

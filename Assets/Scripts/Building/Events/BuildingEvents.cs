@@ -4,22 +4,22 @@ using UnityEngine;
 [CreateAssetMenu(fileName = "BuildingEvents", menuName = "Building/BuildingEvents")]
 public class BuildingEvents : ScriptableObject
 {
-    public event Action<GridEdge, BoardData> OnBoardPlaced;
-    public event Action<GridEdge> OnBoardRemoved;
-    public event Action<GridEdge?> OnPreviewChanged;
+    public event Action<GridFace, BoardData> OnBoardPlaced;
+    public event Action<GridFace> OnBoardRemoved;
+    public event Action<GridFace?> OnPreviewChanged;
 
-    public void RaiseBoardPlaced(GridEdge edge, BoardData data)
+    public void RaiseBoardPlaced(GridFace face, BoardData data)
     {
-        OnBoardPlaced?.Invoke(edge, data);
+        OnBoardPlaced?.Invoke(face, data);
     }
 
-    public void RaiseBoardRemoved(GridEdge edge)
+    public void RaiseBoardRemoved(GridFace face)
     {
-        OnBoardRemoved?.Invoke(edge);
+        OnBoardRemoved?.Invoke(face);
     }
 
-    public void RaisePreviewChanged(GridEdge? edge)
+    public void RaisePreviewChanged(GridFace? face)
     {
-        OnPreviewChanged?.Invoke(edge);
+        OnPreviewChanged?.Invoke(face);
     }
 }

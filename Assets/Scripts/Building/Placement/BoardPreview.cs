@@ -11,7 +11,7 @@ public class BoardPreview : MonoBehaviour
     private bool _isVisible;
 
     public bool IsVisible => _isVisible;
-    public GridEdge? CurrentEdge { get; private set; }
+    public GridFace? CurrentFace { get; private set; }
 
     private void Awake()
     {
@@ -24,11 +24,11 @@ public class BoardPreview : MonoBehaviour
         }
     }
 
-    public void Show(GridEdge edge, Vector3 worldPosition, Quaternion rotation, bool isValid)
+    public void Show(GridFace face, Vector3 worldPosition, Quaternion rotation, bool isValid)
     {
         if (_previewObject == null) return;
 
-        CurrentEdge = edge;
+        CurrentFace = face;
         _previewObject.transform.position = worldPosition;
         _previewObject.transform.rotation = rotation;
 
@@ -38,7 +38,7 @@ public class BoardPreview : MonoBehaviour
 
     public void Hide()
     {
-        CurrentEdge = null;
+        CurrentFace = null;
         SetVisible(false);
     }
 

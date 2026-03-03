@@ -11,6 +11,19 @@ public class InventoryDebug : MonoBehaviour
     [SerializeField] private ItemData _testReinforcer;
     [SerializeField] private int _testQuantity = 5;
 
+    private void Start(){
+        if (_testBoard != null)
+            {
+                _inventory.DebugAddItem(_testBoard, _testQuantity);
+                Debug.Log($"[InventoryDebug] Added {_testQuantity} boards");
+            }
+        if (_testReinforcer != null)
+            {
+                _inventory.DebugAddItem(_testReinforcer, _testQuantity);
+                Debug.Log($"[InventoryDebug] Added {_testQuantity} reinforcers");
+            }
+    }
+
     private void Update()
     {
         if (_inventory == null) return;

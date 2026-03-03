@@ -18,12 +18,12 @@ public class BoardPlacer : MonoBehaviour
     [SerializeField] private ItemData _boardItem;
 
     private PlayerInput _input;
-    private EdgeHit _currentEdgeHit;
+    private FaceHit _currentFaceHit;
 
     private void Awake()
     {
         _input = new PlayerInput();
-        
+
         if (_gridManager == null)
             _gridManager = GridManager.Instance;
     }
@@ -42,14 +42,14 @@ public class BoardPlacer : MonoBehaviour
         }
 
         _input.Update();
-        DetectTargetEdge();
+        DetectTargetFace();
         UpdatePreview();
         HandleInput();
     }
 
-    private void DetectTargetEdge()
+    private void DetectTargetFace()
     {
-        _currentEdgeHit = EdgeDetector.DetectEdge(
+        _currentFaceHit = FaceDetector.DetectFace(
             _cameraTransform.position,
             _cameraTransform.forward,
             _placeDistance,
@@ -62,14 +62,15 @@ public class BoardPlacer : MonoBehaviour
     {
         if (_preview == null) return;
 
-        bool hasDirection = _currentEdgeHit.IsValid || _currentEdgeHit.Edge.Direction != EdgeDirection.None;
-        bool isOccupied = _gridManager.HasBoardAtFace(_currentEdgeHit.Edge);
-
-        if (hasDirection && !isOccupied)
+        if (_currentFaceHit.IsValid && !_gridManager.HasBoard(_currentFaceHit.Face))
         {
-            Quaternion rotation = GridManager.GetBoardRotation(_currentEdgeHit.Edge.Direction);
-            _preview.Show(_currentEdgeHit.Edge, _currentEdgeHit.WorldPosition, rotation, _currentEdgeHit.IsValid);
-            _events?.RaisePreviewChanged(_currentEdgeHit.Edge);
+            Quaternion rotation = _currentFaceHit.Face.GetRotation();
+            _preview.Show(
+                _currentFaceHit.Face,
+                _currentFaceHit.WorldPosition,
+                rotation,
+                _currentFaceHit.IsValid);
+            _events?.RaisePreviewChanged(_currentFaceHit.Face);
         }
         else
         {
@@ -93,10 +94,10 @@ public class BoardPlacer : MonoBehaviour
 
     private void TryPlaceBoard()
     {
-        if (!_currentEdgeHit.IsValid)
+        if (!_currentFaceHit.IsValid)
             return;
 
-        if (_gridManager.HasBoardAtFace(_currentEdgeHit.Edge))
+        if (_gridManager.HasBoard(_currentFaceHit.Face))
             return;
 
         if (_inventory != null && _boardItem != null)
@@ -106,7 +107,7 @@ public class BoardPlacer : MonoBehaviour
         }
 
         BoardData data = BoardData.Default;
-        if (_gridManager.TryPlaceBoard(_currentEdgeHit.Edge, data))
+        if (_gridManager.TryPlaceBoard(_currentFaceHit.Face, data))
         {
             if (_inventory != null && _boardItem != null)
             {
@@ -117,17 +118,16 @@ public class BoardPlacer : MonoBehaviour
 
     private void TryRemoveBoard()
     {
-        GridEdge? edgeToRemove = EdgeDetector.DetectEdgeForRemoval(
+        GridFace? faceToRemove = FaceDetector.DetectFaceForRemoval(
             _cameraTransform.position,
             _cameraTransform.forward,
             _placeDistance,
-            _placeLayer,
-            _gridManager
+            _placeLayer
         );
 
-        if (edgeToRemove.HasValue)
+        if (faceToRemove.HasValue)
         {
-            _gridManager.RemoveBoard(edgeToRemove.Value);
+            _gridManager.RemoveBoard(faceToRemove.Value);
         }
     }
 

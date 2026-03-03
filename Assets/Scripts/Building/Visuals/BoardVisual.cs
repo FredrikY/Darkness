@@ -6,23 +6,23 @@ public class BoardVisual : MonoBehaviour
 {
     [SerializeField] private MeshRenderer _meshRenderer;
     [SerializeField] private float _snapTriggerThickness = 0.1f;
-    
-    private GridEdge _edge;
+
+    private GridFace _face;
     private bool _isPreview;
     private readonly List<BoardSnapZone> _snapZones = new();
 
-    public GridEdge Edge => _edge;
+    public GridFace Face => _face;
     public bool IsPreview => _isPreview;
 
-    public void Initialize(GridEdge edge)
+    public void Initialize(GridFace face)
     {
-        _edge = edge;
+        _face = face;
         _isPreview = false;
-        name = $"Board_{edge.Cell}_{edge.Direction}";
-        
+        name = $"Board_{face}";
+
         CreateSnapZones();
     }
-    
+
     public void CleanupSnapZones()
     {
         foreach (var zone in _snapZones)
@@ -32,94 +32,36 @@ public class BoardVisual : MonoBehaviour
         }
         _snapZones.Clear();
     }
-    
+
     private void OnDestroy()
     {
         CleanupSnapZones();
     }
-    
+
     private void CreateSnapZones()
     {
         CleanupSnapZones();
-        
+
         if (GridManager.Instance == null) return;
-        
+
         float cellSize = GridManager.Instance.CellSize;
-        List<GridEdge> adjacentEdges = GetAdjacentPlacementEdges(_edge);
-        
-        foreach (GridEdge adjacentEdge in adjacentEdges)
+
+        // Get all empty adjacent faces from the GridManager
+        var emptyFaces = new List<GridFace>();
+        GridManager.Instance.GetEmptyAdjacentFaces(_face, emptyFaces);
+
+        foreach (GridFace adjacentFace in emptyFaces)
         {
-            if (!GridManager.Instance.HasBoardAtFace(adjacentEdge))
-            {
-                BoardSnapZone zone = BoardSnapZone.Create(gameObject, adjacentEdge, cellSize, _snapTriggerThickness);
-                _snapZones.Add(zone);
-            }
-        }
-    }
-    
-    private static List<GridEdge> GetAdjacentPlacementEdges(GridEdge edge)
-    {
-        var edges = new List<GridEdge>();
-        Vector3Int cell = edge.Cell;
-        EdgeDirection dir = edge.Direction;
-        
-        GetTangentAxes(dir, 
-            out Vector3Int t1Pos, out Vector3Int t1Neg, out EdgeDirection t1DirPos, out EdgeDirection t1DirNeg,
-            out Vector3Int t2Pos, out Vector3Int t2Neg, out EdgeDirection t2DirPos, out EdgeDirection t2DirNeg);
-        
-        edges.Add(new GridEdge(cell + t1Pos, dir));
-        edges.Add(new GridEdge(cell, t1DirPos));
-        
-        edges.Add(new GridEdge(cell + t1Neg, dir));
-        edges.Add(new GridEdge(cell, t1DirNeg));
-        
-        edges.Add(new GridEdge(cell + t2Pos, dir));
-        edges.Add(new GridEdge(cell, t2DirPos));
-        
-        edges.Add(new GridEdge(cell + t2Neg, dir));
-        edges.Add(new GridEdge(cell, t2DirNeg));
-        
-        return edges;
-    }
-    
-    private static void GetTangentAxes(EdgeDirection faceDir,
-        out Vector3Int t1Pos, out Vector3Int t1Neg, out EdgeDirection t1DirPos, out EdgeDirection t1DirNeg,
-        out Vector3Int t2Pos, out Vector3Int t2Neg, out EdgeDirection t2DirPos, out EdgeDirection t2DirNeg)
-    {
-        switch (faceDir)
-        {
-            case EdgeDirection.Up:
-            case EdgeDirection.Down:
-                t1Pos = Vector3Int.right; t1Neg = Vector3Int.left;
-                t1DirPos = EdgeDirection.Right; t1DirNeg = EdgeDirection.Left;
-                t2Pos = Vector3Int.forward; t2Neg = Vector3Int.back;
-                t2DirPos = EdgeDirection.Forward; t2DirNeg = EdgeDirection.Back;
-                break;
-            case EdgeDirection.Left:
-            case EdgeDirection.Right:
-                t1Pos = Vector3Int.up; t1Neg = Vector3Int.down;
-                t1DirPos = EdgeDirection.Up; t1DirNeg = EdgeDirection.Down;
-                t2Pos = Vector3Int.forward; t2Neg = Vector3Int.back;
-                t2DirPos = EdgeDirection.Forward; t2DirNeg = EdgeDirection.Back;
-                break;
-            case EdgeDirection.Forward:
-            case EdgeDirection.Back:
-                t1Pos = Vector3Int.right; t1Neg = Vector3Int.left;
-                t1DirPos = EdgeDirection.Right; t1DirNeg = EdgeDirection.Left;
-                t2Pos = Vector3Int.up; t2Neg = Vector3Int.down;
-                t2DirPos = EdgeDirection.Up; t2DirNeg = EdgeDirection.Down;
-                break;
-            default:
-                t1Pos = t1Neg = t2Pos = t2Neg = Vector3Int.zero;
-                t1DirPos = t1DirNeg = t2DirPos = t2DirNeg = EdgeDirection.None;
-                break;
+            BoardSnapZone zone = BoardSnapZone.Create(
+                gameObject, adjacentFace, cellSize, _snapTriggerThickness);
+            _snapZones.Add(zone);
         }
     }
 
     public void SetPreviewMode(bool isPreview)
     {
         _isPreview = isPreview;
-        
+
         if (_meshRenderer != null)
         {
             foreach (var mat in _meshRenderer.materials)
@@ -148,7 +90,7 @@ public class BoardVisual : MonoBehaviour
 
         foreach (var mat in _meshRenderer.materials)
         {
-            mat.color = isValid 
+            mat.color = isValid
                 ? new Color(0.2f, 1f, 0.2f, _isPreview ? 0.5f : 1f)
                 : new Color(1f, 0.2f, 0.2f, _isPreview ? 0.5f : 1f);
         }
