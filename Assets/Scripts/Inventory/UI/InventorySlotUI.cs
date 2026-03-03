@@ -1,8 +1,9 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using TMPro;
 
-public class InventorySlotUI : MonoBehaviour
+public class InventorySlotUI : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IDropHandler, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
 {
     [Header("References")]
     [SerializeField] private Image _iconImage;
@@ -14,6 +15,12 @@ public class InventorySlotUI : MonoBehaviour
     private bool _isHotbar;
     private Inventory _inventory;
     private InventoryEvents _events;
+
+    [Header("Drag & Drop")]
+    [SerializeField] private Image _dropHighlight;
+    [SerializeField] private Color _highlightColor = new Color(1f, 1f, 1f, 0.3f);
+    private Color _originalHighlightColor;
+    private InventoryDragController _dragController;
 
     public int SlotIndex => _slotIndex;
     public bool IsHotbar => _isHotbar;
@@ -31,7 +38,83 @@ public class InventorySlotUI : MonoBehaviour
         if (_slotButton != null)
             _slotButton.onClick.AddListener(OnSlotClicked);
 
+        if (_dropHighlight != null)
+            _originalHighlightColor = _dropHighlight.color;
+
         UpdateDisplay();
+    }
+
+    public void SetDragController(InventoryDragController controller)
+    {
+        _dragController = controller;
+    }
+
+    public void OnBeginDrag(PointerEventData eventData)
+    {
+        if (eventData.button != PointerEventData.InputButton.Left || _dragController == null)
+            return;
+
+        var slot = _inventory.GetSlot(_slotIndex, _isHotbar);
+        if (slot.IsEmpty)
+            return;
+
+        _dragController.BeginDrag(this, slot.Item, slot.Quantity);
+        _dragController.ClearSourceSlot();
+    }
+
+    public void OnDrag(PointerEventData eventData)
+    {
+        if (_dragController != null && _dragController.IsDragging)
+        {
+            _dragController.UpdateDragPosition(eventData.position);
+        }
+    }
+
+    public void OnEndDrag(PointerEventData eventData)
+    {
+        if (_dragController == null || !_dragController.IsDragging)
+            return;
+
+        if (eventData.pointerCurrentRaycast.gameObject == null || 
+            eventData.pointerCurrentRaycast.gameObject.GetComponent<InventorySlotUI>() == null)
+        {
+            _dragController.CancelDrag();
+        }
+    }
+
+    public void OnDrop(PointerEventData eventData)
+    {
+        if (_dragController == null || !_dragController.IsDragging)
+            return;
+
+        _dragController.TryDropOnSlot(this);
+    }
+
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        if (_dragController == null || !_dragController.IsDragging || _dropHighlight == null)
+            return;
+
+        if (_dragController.GetSourceSlot() != this)
+        {
+            _dropHighlight.color = _highlightColor;
+        }
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        if (_dropHighlight != null)
+        {
+            _dropHighlight.color = _originalHighlightColor;
+        }
+    }
+
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        if (eventData.button != PointerEventData.InputButton.Right || _dragController == null)
+            return;
+
+        _dragController.SplitFromSlot(this);
     }
 
     private void OnDestroy()
