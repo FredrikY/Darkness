@@ -213,7 +213,7 @@ public partial class @InputSystem_Actions: IInputActionCollection2, IDisposable
                     ""name"": ""ToggleInventory"",
                     ""type"": ""Button"",
                     ""id"": ""a1b2c3d4-1234-5678-9abc-def012345678"",
-                    ""expectedControlType"": ""Button"",
+                    ""expectedControlType"": """",
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": false
